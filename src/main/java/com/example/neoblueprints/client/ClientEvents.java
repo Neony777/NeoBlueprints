@@ -15,6 +15,9 @@ public final class ClientEvents {
 
     private ClientEvents() {}
 
+    /** Guards against the recursive tooltip loop: our redraw fires another Pre event. */
+    private static boolean inTooltipRedraw = false;
+
     public static void register() {
         NeoForge.EVENT_BUS.addListener(ClientEvents::onContainerRenderForeground);
         NeoForge.EVENT_BUS.addListener(ClientEvents::onTooltipPre);
@@ -49,7 +52,14 @@ public final class ClientEvents {
         if (replacement == null) return;
 
         // Cancel the original tooltip and draw ours at the same screen position.
+        // Guard against recursion: renderComponentTooltip fires another RenderTooltipEvent.Pre.
+        if (inTooltipRedraw) return;
         event.setCanceled(true);
-        event.getGraphics().renderComponentTooltip(mc.font, replacement, event.getX(), event.getY());
+        inTooltipRedraw = true;
+        try {
+            event.getGraphics().renderComponentTooltip(mc.font, replacement, event.getX(), event.getY());
+        } finally {
+            inTooltipRedraw = false;
+        }
     }
 }
