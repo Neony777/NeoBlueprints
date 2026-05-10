@@ -40,6 +40,8 @@ public final class ServerSyncHandler {
     private static void syncAll(net.minecraft.world.entity.player.Player player) {
         if (!(player instanceof ServerPlayer sp)) return;
         NetworkHandler.sendBlueprintsTo(sp);
-        NetworkHandler.sendUnlocksTo(sp, UnlockHelper.get(sp).getUnlocked());
+        // Use UnlockHelper.syncTo so temp unlocks are included in the packet,
+        // not just permanent ones.
+        UnlockHelper.syncTo(sp);
     }
 }
