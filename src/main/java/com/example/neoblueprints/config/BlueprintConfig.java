@@ -34,6 +34,8 @@ import java.util.Set;
  * <pre>
  * {
  *   "_comment": "...",
+ *   "singleUseBP": true,
+ *   "tempUnlockSeconds": 60,
  *   "blueprints": [
  *     {
  *       "id": "neoblueprints:iron_tools",
@@ -44,6 +46,9 @@ import java.util.Set;
  *   ]
  * }
  * </pre>
+ *
+ * <p>{@code singleUseBP=true} keeps the original consume-on-use behavior.
+ * When false, blueprint use grants a short-lived unlock instead of consuming the item.
  *
  * <p>The union of every blueprint's recipes implicitly forms the locked-recipe
  * set; there is no separate "lockedRecipes" list to keep in sync.
@@ -76,11 +81,12 @@ public final class BlueprintConfig {
                 NeoBlueprintsMod.LOGGER.info("Wrote default blueprint config to {}", path);
             }
             String content = Files.readString(path, StandardCharsets.UTF_8);
-            parseAndStore(content);
-            NeoBlueprintsMod.LOGGER.info("Loaded {} blueprint(s) from {}", blueprints.size(), path);
+            String migrated = migrate(content, path);
+            parseAndStore(migrated);
+            NeoBlueprintsMod.LOGGER.info("Loaded {} blueprint(s) | mode={} | tempSecs={} | from={}",
+                    blueprints.size(), singleUse ? "single-use" : "multi-use", tempUnlockSeconds, path);
         } catch (Exception e) {
             NeoBlueprintsMod.LOGGER.error("Failed to load blueprint config at {}: {}", path, e.toString());
-            // Fall back to defaults in memory so the mod stays usable.
             try { parseAndStore(defaultJson()); } catch (Exception ignored) {}
         }
     }
@@ -92,9 +98,41 @@ public final class BlueprintConfig {
             Files.createDirectories(path.getParent());
             Files.writeString(path, defaultJson(), StandardCharsets.UTF_8);
         }
-        parseAndStore(Files.readString(path, StandardCharsets.UTF_8));
-        NeoBlueprintsMod.LOGGER.info("Reloaded {} blueprint(s) from {}", blueprints.size(), path);
+        String content = migrate(Files.readString(path, StandardCharsets.UTF_8), path);
+        parseAndStore(content);
+        NeoBlueprintsMod.LOGGER.info("Reloaded {} blueprint(s) | mode={} | tempSecs={}",
+                blueprints.size(), singleUse ? "single-use" : "multi-use", tempUnlockSeconds);
         return blueprints.size();
+    }
+
+    /**
+     * If the JSON is missing the v1.2.2+ fields ({@code singleUseBP}, {@code tempUnlockSeconds}),
+     * inserts them with their defaults and re-saves the file so users can see and edit them.
+     */
+    private static String migrate(String json, Path path) {
+        try {
+            JsonObject root = JsonParser.parseString(json).getAsJsonObject();
+            boolean dirty = false;
+            if (!root.has("singleUseBP")) {
+                root.addProperty("singleUseBP", true);
+                dirty = true;
+            }
+            if (!root.has("tempUnlockSeconds")) {
+                root.addProperty("tempUnlockSeconds", 60);
+                dirty = true;
+            }
+            if (dirty) {
+                String updated = GSON.toJson(root);
+                Files.writeString(path, updated, StandardCharsets.UTF_8);
+                NeoBlueprintsMod.LOGGER.info(
+                        "Migrated neoblueprints.json — added missing fields (singleUseBP, tempUnlockSeconds). " +
+                        "Edit them in {} to change behavior.", path);
+                return updated;
+            }
+        } catch (Exception e) {
+            NeoBlueprintsMod.LOGGER.warn("Could not migrate config: {}", e.toString());
+        }
+        return json;
     }
 
     private static void parseAndStore(String json) {
@@ -215,10 +253,10 @@ public final class BlueprintConfig {
                     "NeoBlueprints configuration.",
                     "",
                     "singleUseBP (default: true):",
-                    "  true  — right-clicking a blueprint consumes it and permanently unlocks its recipes.",
-                    "  false — right-clicking a blueprint does NOT consume it; instead it grants a temporary",
+                    "  true  - right-clicking a blueprint consumes it and permanently unlocks its recipes.",
+                    "  false - right-clicking a blueprint does NOT consume it; instead it grants a temporary",
                     "          unlock lasting 'tempUnlockSeconds' seconds. The item stays in the player's",
-                    "          inventory, allowing trading and lending between players.",
+                    "          inventory, letting the same blueprint be used by multiple players over time.",
                     "",
                     "tempUnlockSeconds (default: 60):",
                     "  How long a temporary unlock lasts in seconds. Only used when singleUseBP is false.",
