@@ -62,9 +62,8 @@ public final class UnlockHelper {
 
     /**
      * Sends the combined permanent + active temporary unlock set to the client.
-     * Package-private so {@link TemporaryUnlockManager} can call it on expiry.
      */
-    static void syncTo(Player player) {
+    public static void syncTo(Player player) {
         if (!(player instanceof ServerPlayer sp)) return;
         Set<ResourceLocation> permanent = get(sp).getUnlocked();
         Set<ResourceLocation> temp = TemporaryUnlockManager.getActive(sp.getUUID());
